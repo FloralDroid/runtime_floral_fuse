@@ -3,17 +3,27 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "mount_info.h"
 
 #include <iterator>
+#include <charconv>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-namespace floral::lxcfs {
+namespace floral::fuse {
 namespace {
 
 std::vector<std::string> SplitWhitespace(std::string_view value) {
@@ -61,6 +71,45 @@ std::string UnescapeMountInfoPath(std::string_view value) {
     return UnescapeField(value);
 }
 
+bool MountOption(std::string_view options, std::string_view option) {
+    size_t begin = 0;
+    while (begin < options.size()) {
+        const auto end = options.find(',', begin);
+        if (options.substr(begin, end == std::string_view::npos ? end : end - begin) == option) {
+            return true;
+        }
+        if (end == std::string_view::npos) break;
+        begin = end + 1;
+    }
+    return false;
+}
+
+bool ParseMountInfo(std::string_view text, std::vector<MountInfo>* mounts) {
+    mounts->clear();
+    std::istringstream stream{std::string(text)};
+    std::string line;
+    while (std::getline(stream, line)) {
+        const auto separator = line.find(" - ");
+        if (separator == std::string::npos) return false;
+        const auto left = SplitWhitespace(std::string_view(line).substr(0, separator));
+        const auto right = SplitWhitespace(std::string_view(line).substr(separator + 3));
+        if (left.size() < 6 || right.size() < 3) return false;
+        MountInfo mount;
+        const auto parsed = std::from_chars(left[0].data(), left[0].data() + left[0].size(), mount.id);
+        if (parsed.ec != std::errc() || parsed.ptr != left[0].data() + left[0].size() || !mount.id) {
+            return false;
+        }
+        mount.device = left[2];
+        mount.root = UnescapeField(left[3]);
+        mount.point = UnescapeField(left[4]);
+        mount.options = left[5];
+        mount.optional.assign(left.begin() + 6, left.end());
+        mount.filesystem = right[0];
+        mounts->push_back(std::move(mount));
+    }
+    return !mounts->empty();
+}
+
 static bool MountInfoMatches(std::string_view mountinfo,
                              std::string_view mountpoint,
                              std::string_view filesystem) {
@@ -105,4 +154,4 @@ bool MountInfoHasMountpoint(std::string_view mountinfo,
     return MountInfoMatches(mountinfo, mountpoint, {});
 }
 
-}  // namespace floral::lxcfs
+}  // namespace floral::fuse

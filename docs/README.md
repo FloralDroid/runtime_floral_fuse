@@ -1,35 +1,16 @@
-# Floral Android LXCFS helper
+# Floral Android FUSE integration
 
 [简体中文](README.zh-CN.md)
 
-This project contains the Android-side integration for the host
-`floral-lxcfs` FUSE service. It is intentionally separate from the host FUSE
-implementation and is checked out at `system/floral/lxcfs` in the Android
-source tree.
+The runtime supports `none` and traditional `lxcfs` modes. Explicit selection
+never falls back to another backend; an omitted selection retains the existing
+`/run/floral-lxcfs` source detection. `none` requires no FUSE support.
 
-The `floral_lxcfs_bind` binary is a short-lived init helper. It does nothing
-when `/run/floral-lxcfs` is absent, and otherwise binds the available CPU,
-memory, proc and sysfs views after Android has mounted its final procfs. This
-includes the cgroup-backed `zoneinfo`, `vmstat`, `buddyinfo`, profile-backed
-kernel identity, CPU topology and single-node NUMA views exposed by Floral
-LXCFS. When the canonical `/sys/devices/virtual/dmi/id` target exists, the
-helper also masks it with the profile-backed DMI identity view. The usual
-`/sys/class/dmi/id` symlink then resolves to the same mounted directory.
-The helper also binds the profile-backed battery thermal zone at
-`/sys/devices/virtual/thermal` and `/sys/class/thermal`, and masks
-`/sys/class/hwmon` with an empty view. It also discovers real, non-symlinked
-`hwmon` directories below `/sys/devices` that contain `tempN_input` files and
-masks only those directories. This prevents direct platform or PCI hwmon paths
-from exposing host temperatures without hiding the rest of the device tree.
-The helper also generates framebuffer `virtual_size` and `modes` views from
-`ro.boot.floral_width`, `ro.boot.floral_height`, and `ro.boot.floral_fps`, so
-those nodes report the effective container display rather than the host mode.
+LXCFS proc, thermal, hwmon and framebuffer views retain their existing paths and
+init mount behavior. `floral_fuse_bind --verify-only` checks the selected source;
+it does not install a view or change the selection. The init builtin performs
+mounts in the existing trusted init context.
 
-The container launcher should expose the host mount with:
-
-```text
---mount type=bind,src=/var/lib/floral-lxcfs,dst=/run/floral-lxcfs,readonly
-```
-
-The helper does not replace `/proc` or `/sys` and does not affect containers
-that do not enable the host LXCFS mount.
+Lupine native procfs/sysfs views are managed by the host and kernel. This runtime
+has no Lupine backend, source handshake, policy audit or private event protocol.
+The removed `lupine` FUSE mode is rejected. Android storage FUSE is unrelated.

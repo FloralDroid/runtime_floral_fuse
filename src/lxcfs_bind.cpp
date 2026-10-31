@@ -3,10 +3,20 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "mount_info.h"
 #include "sysfs_mask.h"
+#include "fuse_view.h"
 
 #include <android-base/logging.h>
 #include <android-base/properties.h>
@@ -27,7 +37,6 @@
 
 namespace {
 
-constexpr char kSourceRoot[] = "/run/floral-lxcfs";
 constexpr char kMountInfo[] = "/proc/self/mountinfo";
 constexpr char kFloralFilesystem[] = "fuse.floral-lxcfs";
 constexpr char kSysDevices[] = "/sys/devices";
@@ -76,9 +85,18 @@ constexpr View kViews[] = {
     {"/run/floral-lxcfs/sys/class/hwmon", "/sys/class/hwmon"},
 };
 
-bool Exists(const char *path) {
+bool OptionalExists(const char *path, bool *exists) {
   struct stat status = {};
-  return stat(path, &status) == 0;
+  if (stat(path, &status) == 0) {
+    *exists = true;
+    return true;
+  }
+  if (errno != ENOENT && errno != ENOTDIR) {
+    PLOG(ERROR) << "Unable to inspect optional view " << path;
+    return false;
+  }
+  *exists = false;
+  return true;
 }
 
 bool IsDirectory(const char *path) {
@@ -96,20 +114,27 @@ std::string ReadMountInfo() {
 }
 
 bool IsAlreadyMounted(const std::string &mountinfo, const char *target) {
-  return floral::lxcfs::MountInfoHasFilesystem(mountinfo, target,
+  return floral::fuse::MountInfoHasFilesystem(mountinfo, target,
                                                kFloralFilesystem);
 }
 
 bool BindView(const View &view, const std::string &mountinfo) {
-  if (!Exists(view.source)) {
-    return true;
-  }
-  if (!Exists(view.target)) {
+  bool source_exists = false, target_exists = false;
+  if (!OptionalExists(view.source, &source_exists)) return false;
+  if (!source_exists) return true;
+  if (!OptionalExists(view.target, &target_exists)) return false;
+  if (!target_exists) {
     LOG(WARNING) << "LXCFS target is unavailable; skipping " << view.target;
     return true;
   }
 
   if (IsAlreadyMounted(mountinfo, view.target)) {
+    struct stat source = {}, target = {};
+    if (stat(view.source, &source) != 0 || stat(view.target, &target) != 0 ||
+        source.st_dev != target.st_dev || source.st_ino != target.st_ino) {
+      LOG(ERROR) << "LXCFS target has a different source: " << view.target;
+      return false;
+    }
     LOG(INFO) << "LXCFS view already mounted at " << view.target;
     return true;
   }
@@ -146,12 +171,14 @@ bool WriteAll(int fd, std::string_view content) {
 
 bool BindGeneratedView(const GeneratedView &view,
                        const std::string &mountinfo) {
-  if (!Exists(view.target)) {
+  bool exists = false;
+  if (!OptionalExists(view.target, &exists)) return false;
+  if (!exists) {
     LOG(WARNING) << "Generated view target is unavailable; skipping "
                  << view.target;
     return true;
   }
-  if (floral::lxcfs::MountInfoHasMountpoint(mountinfo, view.target)) {
+  if (floral::fuse::MountInfoHasMountpoint(mountinfo, view.target)) {
     LOG(INFO) << "Generated view already mounted at " << view.target;
     return true;
   }
@@ -202,14 +229,7 @@ std::vector<GeneratedView> DisplayViews() {
 
 } // namespace
 
-int main(int /* argc */, char **argv) {
-  android::base::InitLogging(argv, &android::base::KernelLogger);
-
-  if (!IsDirectory(kSourceRoot)) {
-    LOG(INFO) << "LXCFS source is not mounted; skipping optional views";
-    return 0;
-  }
-
+int floral::fuse::BindLxcfsViews() {
   const std::string mountinfo = ReadMountInfo();
   if (mountinfo.empty()) {
     LOG(ERROR) << "Unable to read " << kMountInfo;
@@ -219,7 +239,7 @@ int main(int /* argc */, char **argv) {
   bool success = true;
   std::vector<std::string> temperature_hwmon_directories;
   if (IsDirectory(kSysClassHwmon) &&
-      !floral::lxcfs::FindTemperatureHwmonDirectories(
+      !floral::fuse::FindTemperatureHwmonDirectories(
           kSysClassHwmon, kSysDevices, &temperature_hwmon_directories)) {
     LOG(ERROR) << "Unable to inspect " << kSysClassHwmon
                << " for temperature providers";

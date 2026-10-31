@@ -1,16 +1,30 @@
+// Copyright 2026 FloralDroid
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package {
-    default_applicable_licenses: ["runtime_floral_lxcfs_license"],
+    default_applicable_licenses: ["runtime_floral_fuse_license"],
 }
 
 license {
-    name: "runtime_floral_lxcfs_license",
+    name: "runtime_floral_fuse_license",
     visibility: [":__subpackages__"],
     license_kinds: ["SPDX-license-identifier-Apache-2.0"],
     license_text: ["LICENSE"],
 }
 
 cc_defaults {
-    name: "floral_lxcfs_bind_defaults",
+    name: "floral_fuse_bind_defaults",
     cflags: [
         "-Wall",
         "-Werror",
@@ -21,20 +35,37 @@ cc_defaults {
 }
 
 cc_binary {
-    name: "floral_lxcfs_bind",
-    defaults: ["floral_lxcfs_bind_defaults"],
+    name: "floral_fuse_bind",
+    defaults: ["floral_fuse_bind_defaults"],
     srcs: [
-        "src/floral_lxcfs_bind.cpp",
-        "src/mount_info.cpp",
-        "src/sysfs_mask.cpp",
+        "src/floral_fuse_bind.cpp",
     ],
+    static_libs: ["libfloral_fuse", "libfloral_fuse_lxcfs"],
     shared_libs: ["libbase"],
-    init_rc: ["init/floral-lxcfs.rc"],
+    init_rc: ["init/floral-fuse.rc"],
+}
+
+cc_library_static {
+    name: "libfloral_fuse_lxcfs",
+    defaults: ["floral_fuse_bind_defaults"],
+    recovery_available: true,
+    srcs: ["src/lxcfs_bind.cpp", "src/sysfs_mask.cpp"],
+    static_libs: ["libfloral_fuse"],
+    shared_libs: ["libbase"],
+}
+
+cc_library_static {
+    name: "libfloral_fuse",
+    defaults: ["floral_fuse_bind_defaults"],
+    recovery_available: true,
+    srcs: ["src/boot_config.cpp", "src/fuse_view.cpp", "src/mount_info.cpp"],
+    export_include_dirs: ["src"],
+    header_libs: ["libbase_headers"],
 }
 
 cc_test_host {
-    name: "floral_lxcfs_sysfs_mask_test",
-    defaults: ["floral_lxcfs_bind_defaults"],
+    name: "floral_fuse_sysfs_mask_test",
+    defaults: ["floral_fuse_bind_defaults"],
     local_include_dirs: ["src"],
     srcs: [
         "src/sysfs_mask.cpp",
@@ -43,8 +74,8 @@ cc_test_host {
 }
 
 cc_test_host {
-    name: "floral_lxcfs_bind_test",
-    defaults: ["floral_lxcfs_bind_defaults"],
+    name: "floral_fuse_bind_test",
+    defaults: ["floral_fuse_bind_defaults"],
     local_include_dirs: ["src"],
     srcs: [
         "src/mount_info.cpp",

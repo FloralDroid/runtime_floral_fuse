@@ -3,6 +3,15 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include "mount_info.h"
@@ -30,22 +39,22 @@ int main() {
             "tmpfs memfd:floral rw\n";
 
     const bool ok =
-            Check(floral::lxcfs::UnescapeMountInfoPath("/run/a\\040b") ==
+            Check(floral::fuse::UnescapeMountInfoPath("/run/a\\040b") ==
                           "/run/a b",
                   "mountinfo space escape") &&
-            Check(floral::lxcfs::MountInfoHasFilesystem(
+            Check(floral::fuse::MountInfoHasFilesystem(
                           mountinfo, "/proc/cpuinfo", "fuse.floral-lxcfs"),
                   "find Floral LXCFS mount") &&
-            Check(!floral::lxcfs::MountInfoHasFilesystem(
+            Check(!floral::fuse::MountInfoHasFilesystem(
                           mountinfo, "/proc/meminfo", "fuse.floral-lxcfs"),
                   "reject unrelated filesystem") &&
-            Check(!floral::lxcfs::MountInfoHasFilesystem(
+            Check(!floral::fuse::MountInfoHasFilesystem(
                           mountinfo, "/proc/stat", "fuse.floral-lxcfs"),
                   "reject unrelated mountpoint") &&
-            Check(floral::lxcfs::MountInfoHasMountpoint(
+            Check(floral::fuse::MountInfoHasMountpoint(
                           mountinfo, "/sys/class/graphics/fb0/virtual_size"),
                   "find generated file bind mount") &&
-            Check(!floral::lxcfs::MountInfoHasMountpoint(mountinfo, "/proc/stat"),
+            Check(!floral::fuse::MountInfoHasMountpoint(mountinfo, "/proc/stat"),
                   "reject absent mountpoint");
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
